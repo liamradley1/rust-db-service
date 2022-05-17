@@ -5,6 +5,7 @@ use chrono::{NaiveDateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use core::option::Option;
 
 #[derive(Serialize, Deserialize, AsChangeset)]
 #[table_name = "user_table"]
@@ -13,7 +14,15 @@ pub struct UserMessage {
     pub password: String,
 }
 
-#[derive(Serialize, Deserialize, Queryable, Insertable)]
+pub fn update(user_message: UserMessage, mut user : User) -> User {
+    let user_result = User::from(user_message);
+    user.email = user_result.email;
+    user.password = user_result.password;
+    user.updated_at = Option::from(Utc::now().naive_utc());
+    user
+}
+
+#[derive(Serialize, Deserialize, Queryable, Insertable, AsChangeset)]
 #[table_name = "user_table"]
 pub struct User {
     pub id: Uuid,
@@ -57,9 +66,13 @@ impl User {
     pub fn update(id: Uuid, user: UserMessage) -> Result<Self, ApiError> {
         let conn = db::connection()?;
 
+        let mut extracted_result = User::find(id).unwrap();
+
+        extracted_result = update(user, extracted_result);
+
         let user = diesel::update(user_table::table)
             .filter(user_table::id.eq(id))
-            .set(user)
+            .set(extracted_result)
             .get_result(&conn)?;
 
         Ok(user)
@@ -76,6 +89,7 @@ impl User {
 
         Ok(res)
     }
+
 }
 
 impl From<UserMessage> for User {
